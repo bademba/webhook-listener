@@ -38,7 +38,7 @@ public class WebhookController {
             String calculatedHex = bytesToHex(calculated);
 
             if (calculatedHex.equalsIgnoreCase(signatureHeader)) {
-                // Parse incoming JSON to extract rrn
+                // Parse incoming JSON to extract rrn -ok
                 JSONObject payload = new JSONObject(body);
                 LOGGER.info(String.format("REQUEST::: %s", payload));
 
