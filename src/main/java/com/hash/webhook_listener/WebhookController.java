@@ -10,8 +10,6 @@ import javax.crypto.spec.SecretKeySpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
-
 @RestController
 @RequestMapping("/webhook")
 public class WebhookController {
@@ -25,8 +23,27 @@ public class WebhookController {
             @RequestBody String body,
             @RequestHeader(value = "X-Signature", required = false) String signatureHeader) {
 
+        JSONObject payload;
+        String rrn = "UNKNOWN";
+
+        try {
+            payload = new JSONObject(body);
+            rrn = payload.optString("rrn", "UNKNOWN");
+        } catch (Exception e) {
+            LOGGER.error("Failed to parse request body JSON: {}", e.getMessage());
+            JSONObject error = new JSONObject()
+                    .put("rrn", rrn)
+                    .put("status", "ERROR");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .header("Content-Type", "application/json")
+                    .body(error.toString());
+        }
+
         if (signatureHeader == null) {
-            JSONObject error = new JSONObject().put("error", "Missing X-Signature header");
+            JSONObject error = new JSONObject()
+                    .put("rrn", rrn)
+                    .put("status", "ERROR")
+                    .put("message", "Missing X-Signature header");
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .header("Content-Type", "application/json")
                     .body(error.toString());
@@ -38,30 +55,33 @@ public class WebhookController {
             String calculatedHex = bytesToHex(calculated);
 
             if (calculatedHex.equalsIgnoreCase(signatureHeader)) {
-                // Parse incoming JSON to extract rrn -ok
-                JSONObject payload = new JSONObject(body);
-                LOGGER.info(String.format("REQUEST::: %s", payload));
-
-                String rrn = payload.optString("rrn", "UNKNOWN");
-
-                // Build success JSON response
+                // ✅ Valid signature
                 JSONObject responseJson = new JSONObject();
                 responseJson.put("rrn", rrn);
                 responseJson.put("status", "SUCCESS");
-                LOGGER.info(String.format("RESPONSE::: %s", responseJson));
 
                 return ResponseEntity.ok()
                         .header("Content-Type", "application/json")
                         .body(responseJson.toString());
 
             } else {
-                JSONObject invalid = new JSONObject().put("status", "INVALID_SIGNATURE");
+                // ❌ Invalid signature
+                JSONObject insecure = new JSONObject();
+                insecure.put("rrn", rrn);
+                insecure.put("status", "INSECURE");
+
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                         .header("Content-Type", "application/json")
-                        .body(invalid.toString());
+                        .body(insecure.toString());
             }
+
         } catch (Exception e) {
-            JSONObject error = new JSONObject().put("error", e.getMessage());
+            LOGGER.error("Unexpected error: {}", e.getMessage());
+
+            JSONObject error = new JSONObject();
+            error.put("rrn", rrn);
+            error.put("status", "ERROR");
+
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .header("Content-Type", "application/json")
                     .body(error.toString());
