@@ -4,11 +4,11 @@ import org.json.JSONObject;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.util.Base64;
 
 @RestController
 @RequestMapping("/webhook")
@@ -50,12 +50,11 @@ public class WebhookController {
         }
 
         try {
-            // Calculate HMAC-SHA1 of the request body
-            byte[] calculated = calculateHmacSha1(SECRET_KEY.getBytes(), body.getBytes());
-            String calculatedHex = bytesToHex(calculated);
+            // Generate HMAC-SHA1 hash using base64-encoded payload (Python equivalent)
+            String calculatedHex = generateHmacSha1Base64(SECRET_KEY, body);
 
             if (calculatedHex.equalsIgnoreCase(signatureHeader)) {
-                // ✅ Valid signature
+                // Valid signature
                 JSONObject responseJson = new JSONObject();
                 responseJson.put("rrn", rrn);
                 responseJson.put("status", "SUCCESS");
@@ -65,7 +64,7 @@ public class WebhookController {
                         .body(responseJson.toString());
 
             } else {
-                // ❌ Invalid signature
+                // Invalid signature
                 JSONObject insecure = new JSONObject();
                 insecure.put("rrn", rrn);
                 insecure.put("status", "INSECURE");
@@ -88,16 +87,28 @@ public class WebhookController {
         }
     }
 
-    private static byte[] calculateHmacSha1(byte[] key, byte[] data) throws Exception {
-        SecretKeySpec signingKey = new SecretKeySpec(key, "HmacSHA1");
+    /**
+     * Generates an HMAC-SHA1 hash of the Base64-encoded payload using SECRET_KEY.
+     * This replicates the Python logic:
+     * base64_encoded_payload = base64.b64encode(data.encode("utf-8"))
+     * mac = hmac.new(pwd.encode(), base64_encoded_payload, sha1)
+     * hex_string = mac.hexdigest()
+     */
+    private static String generateHmacSha1Base64(String key, String data) throws Exception {
+        // Base64 encode the payload
+        String base64EncodedPayload = Base64.getEncoder().encodeToString(data.getBytes("UTF-8"));
+
+        // Create HMAC-SHA1 using the secret key
+        SecretKeySpec signingKey = new SecretKeySpec(key.getBytes("UTF-8"), "HmacSHA1");
         Mac mac = Mac.getInstance("HmacSHA1");
         mac.init(signingKey);
-        return mac.doFinal(data);
-    }
 
-    private static String bytesToHex(byte[] bytes) {
+        // Compute the HMAC of the Base64-encoded data
+        byte[] rawHmac = mac.doFinal(base64EncodedPayload.getBytes("UTF-8"));
+
+        // Convert to lowercase hex string (same as Python hexdigest)
         StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) {
+        for (byte b : rawHmac) {
             sb.append(String.format("%02x", b));
         }
         return sb.toString();
