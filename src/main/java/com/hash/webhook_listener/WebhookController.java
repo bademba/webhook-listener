@@ -10,6 +10,8 @@ import javax.crypto.spec.SecretKeySpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.UUID;
+
 @RestController
 @RequestMapping("/webhook")
 public class WebhookController {
@@ -87,6 +89,41 @@ public class WebhookController {
                     .body(error.toString());
         }
     }
+
+    //validate path
+    @PostMapping("/validate")
+    public ResponseEntity<String> validateBill(@RequestBody String body) {
+        try {
+            JSONObject payload = new JSONObject(body);
+            String billRef = payload.optString("billRef", "");
+            double amount = payload.optDouble("amount", 0.00);
+            String amountStr = String.format("%.2f", amount);
+
+            // ✅ Always return success response by default
+            JSONObject success = new JSONObject();
+            success.put("billRef", billRef);
+            success.put("amount", amountStr);
+            success.put("billId", "40651440"); // Static or can be generated dynamically
+            success.put("status", "valid");
+            success.put("statusDescription", "");
+
+            return ResponseEntity.ok()
+                    .header("Content-Type", "application/json")
+                    .body(success.toString());
+
+        } catch (Exception e) {
+            LOGGER.error("Error processing /validate request: {}", e.getMessage());
+            JSONObject errorResponse = new JSONObject();
+            errorResponse.put("status", "error");
+            errorResponse.put("statusDescription", "Invalid request format");
+
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .header("Content-Type", "application/json")
+                    .body(errorResponse.toString());
+        }
+    }
+
+
 
     private static byte[] calculateHmacSha1(byte[] key, byte[] data) throws Exception {
         SecretKeySpec signingKey = new SecretKeySpec(key, "HmacSHA1");
